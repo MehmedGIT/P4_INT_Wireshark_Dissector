@@ -41,10 +41,10 @@ function p4_proto.dissector(buffer,pinfo,tree)
     subtree_report:add(buffer(4,4), "seq_no (32 bits) - Hex: " .. string.format("%08X", buffer(4,4):bitfield(0, 32)))
     subtree_report:add(buffer(8,4), "ingress_tstamp (32 bits) - Hex: " .. string.format("%08X", buffer(8,4):bitfield(0, 32)))
 
--- TODO reporting specification drop_report_header and report_local_header is not yet included
+	-- TODO reporting specification drop_report_header and report_local_header is not yet included
 	
 	local subtree_eth = subtree_report:add(p4_int_proto,buffer(),"Ethernet II")
--- Started Ethernet parsing
+	-- Started Ethernet parsing
 	subtree_eth:add(buffer(12,6), "dst_addr (48 bits) - Hex: " .. string.format("%02x:%02x:%02x:%02x:%02x:%02x", 
 								buffer(12,1):bitfield(0, 8), buffer(13,1):bitfield(0, 8), 
 								buffer(14,1):bitfield(0, 8), buffer(15,1):bitfield(0, 8), 
@@ -56,7 +56,7 @@ function p4_proto.dissector(buffer,pinfo,tree)
 	subtree_eth:add(buffer(24,2), "ethertype (16 bits) - Hex: " .. string.format("%04X", buffer(24,2):bitfield(0, 16)))
 
 	local subtree_ipv4 = subtree_report:add(p4_int_proto,buffer(),"Internet Protocol Version 4")
--- Started IPV4 parsing
+	-- Started IPV4 parsing
     subtree_ipv4:add(buffer(26,1), "version (4 bits) - Binary: " .. tobits(buffer(26,1):uint(), 8, 1, 4))
     subtree_ipv4:add(buffer(26,1), "ihl (4 bits) - Binary: " .. tobits(buffer(26,1):uint(), 8, 5, 8))
     subtree_ipv4:add(buffer(27,1), "dscp (6 bits) - Binary: " .. tobits(buffer(27,1):uint(), 8, 1, 6))
@@ -102,15 +102,16 @@ function p4_proto.dissector(buffer,pinfo,tree)
 
 	local subtree_int = subtree_report:add(p4_int_proto,buffer(),"INT")
 	local subtree_int_shim = subtree_int:add(p4_int_proto,buffer(),"INT Shim")
---parse INT shim header -- intl4_shim
+	
+	--parse INT shim header -- intl4_shim
     subtree_int_shim:add(buffer(66,1), "int_type (8 bits) - Hex: " .. string.format("%02X", buffer(66,1):bitfield(0, 8)))
     subtree_int_shim:add(buffer(67,1), "rsvd1 (8 bits) - Hex: " .. string.format("%02X", buffer(67,1):bitfield(0, 8)))
     subtree_int_shim:add(buffer(68,1), "len (8 bits) - Hex: " .. string.format("%02X", buffer(68,1):bitfield(0, 8)))
     subtree_int_shim:add(buffer(69,1), "rsvd2 (8 bits) - Hex: " .. string.format("%02X", buffer(69,1):bitfield(0, 8)))
 
 	local subtree_int_header = subtree_int:add(p4_int_proto,buffer(),"INT Header")
---parse INT metadata header -- int_header
-	--subtree_int_header:add(buffer(70,2), "controlField (16 bits) - Hex: " .. string.format("%04X", buffer(70,2):bitfield(0, 16)))
+	
+	--parse INT metadata header -- int_header
     subtree_int_header:add(buffer(70,1), "ver (2 bits) - Binary: " .. tobits(buffer(70,1):uint(), 8, 1, 2))
     subtree_int_header:add(buffer(70,1), "rep (2 bits) - Binary: " .. tobits(buffer(70,1):uint(), 8, 3, 4))
     subtree_int_header:add(buffer(70,1), "c (1 bit) - Binary: " .. tobits(buffer(70,1):uint(), 8, 5, 5))
@@ -119,12 +120,14 @@ function p4_proto.dissector(buffer,pinfo,tree)
     subtree_int_header:add(buffer(71,1), "ins_cnt (5 bits) - Binary: " .. tobits(buffer(71,1):uint(), 8, 4, 8))
     subtree_int_header:add(buffer(72,1), "maxHopCnt (8 bits) - " .. string.format("%d", buffer(72,1):bitfield(0, 8)))
     subtree_int_header:add(buffer(73,1), "totalHopCnt (8 bits) - " .. string.format("%d", buffer(73,1):bitfield(0, 8)))
-	totalHopCnt = buffer(73,1):bitfield(0, 8) -- switch number
+	totalHopCnt = buffer(73,1):bitfield(0, 8) -- Switch Number
     subtree_int_header:add(buffer(74,2), "instructionBitmap (16 bits) - Hex: " .. string.format("%04X", buffer(74,2):bitfield(0, 16)))
+    instBitmap = buffer(74,2):bitfield(0, 16) -- Instruction Bitmap
     subtree_int_header:add(buffer(76,2), "rsvd2 (16 bits) - Hex: " .. string.format("%04X", buffer(76,2):bitfield(0, 16)))
    
 	local subtree_int_data = subtree_int:add(p4_int_proto,buffer(),"INT Data")
---parse INT metadata -- int_data
+	
+	--parse INT metadata -- int_data
 	curser = 78
 	index = 0
 	subtree_str = ""
@@ -134,45 +137,46 @@ function p4_proto.dissector(buffer,pinfo,tree)
 		
 		local subtree_switch = subtree_int_data:add(p4_int_proto,buffer(),subtree_str)
 
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x8000) ~= 0) then
+		if(bit.band(instBitmap, 0x8000) ~= 0) then
 			subtree_switch:add(buffer(curser,4), "switch_id (32 bits) - Hex: " .. string.format("%08X", buffer(curser,4):bitfield(0, 32)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x4000) ~= 0) then
+		if(bit.band(instBitmap, 0x4000) ~= 0) then
 			subtree_switch:add(buffer(curser, 2), "ingress_port_id (16 bits) - " .. string.format("%d", buffer(curser,2):bitfield(0, 16)))
 			subtree_switch:add(buffer(curser, 2), "engress_port_id (16 bits) - " .. string.format("%d", buffer(curser,2):bitfield(0, 16)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x2000) ~= 0) then
+		if(bit.band(instBitmap, 0x2000) ~= 0) then
 			subtree_switch:add(buffer(curser, 4), "hop_latency (32 bits) - Hex: " .. string.format("%08X", buffer(cuser,4):bitfield(0, 32)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x1000) ~= 0) then
+		if(bit.band(instBitmap, 0x1000) ~= 0) then
 			subtree_switch:add(buffer(curser,1), "q_id (8 bits) - " .. string.format("%d", buffer(curser,1):bitfield(0, 8)))
 			subtree_switch:add(buffer(curser,3), "q_occupancy (24 bits) - Hex: " .. string.format("%06X", buffer(curser,3):bitfield(0, 24)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x0800) ~= 0) then
+		if(bit.band(instBitmap, 0x0800) ~= 0) then
 			subtree_switch:add(buffer(curser, 4), "ingress_tstamp (32 bits) - Hex: " .. string.format("%08X", buffer(curser,4):bitfield(0, 32)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x0400) ~= 0) then
+		if(bit.band(instBitmap, 0x0400) ~= 0) then
 			subtree_switch:add(buffer(curser,4), "egress_tstamp (32 bits) - Hex: " .. string.format("%08X", buffer(curser,4):bitfield(0, 32)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x0200) ~= 0) then
+		if(bit.band(instBitmap, 0x0200) ~= 0) then
 			subtree_switch:add(buffer(curser,1), "q_id (8 bits) - " .. string.format("%d", buffer(curser,1):bitfield(0, 8)))
 			subtree_switch:add(buffer(curser,3), "q_congestion (24 bits) - Hex: " .. string.format("%06X", buffer(curser, 3):bitfield(0, 24)))
 			curser = curser + 4
 		end
-		if(bit.band(buffer(74,2):bitfield(0, 16), 0x0100) ~= 0) then
+		if(bit.band(instBitmap, 0x0100) ~= 0) then
 			subtree_switch:add(buffer(curser,4), "egress_port_tx_util (32 bits) - Hex: " .. string.format("%08X", buffer(curser,4):bitfield(0, 32)))
 			curser = curser + 4
 		end
 	end
 
 	local subtree_int_tail = subtree_int:add(p4_int_proto,buffer(),"INT Tail")
---parse intl4_tail
+	
+	--parse intl4_tail
     subtree_int_tail:add(buffer(curser,1), "next_proto (8 bits) - Hex: " .. string.format("%02X", buffer(curser,1):bitfield(0, 8)))
     curser = curser + 1
     subtree_int_tail:add(buffer(curser,2), "dest_port (16 bits) - " .. string.format("%d", buffer(curser,2):bitfield(0, 16)))
@@ -183,4 +187,3 @@ end
 
 my_table = DissectorTable.get("udp.port")
 my_table:add(1234, p4_proto)
-
